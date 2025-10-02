@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Schedule Spotify playback of a specific track at a given time."""
+"""Schedule Spotify playback of a track, album, playlist, or artist at a given time."""
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import time
 from datetime import datetime, timedelta, time as dt_time
-from typing import Optional
+from typing import Optional, Tuple
 
 try:
     import spotipy
@@ -21,29 +22,45 @@ except ImportError as exc:  # pragma: no cover - dependency guidance
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
-except ImportError as exc:  # pragma: no cover - dependency guidance
-    print(
-        "The python-dotenv package is recommended for loading environment variables from a .env file. "
-        "Install it with `pip install python-dotenv`.",
-        file=sys.stderr,
-    )
-    if(input("Continue without it? [y/N] ").lower() != 'y'):
-        raise
+except ImportError:
+    load_dotenv = None
 
-def parse_track_uri(raw: str) -> str:
-    """Normalise supported track identifiers to a Spotify track URI."""
+if load_dotenv:
+    load_dotenv()
+
+_SPOTIFY_URI_PATTERN = re.compile(
+    r"spotify:(?P<type>track|album|playlist|artist):(?P<id>[A-Za-z0-9]{22})"
+)
+_SPOTIFY_URL_PATTERN = re.compile(
+    r"open\.spotify\.com/(?P<type>track|album|playlist|artist)/(?P<id>[A-Za-z0-9]{22})"
+)
+
+
+def parse_media_reference(raw: str) -> Tuple[str, str]:
+    """Normalise track/album/playlist/artist identifiers to a Spotify URI."""
     text = raw.strip()
-    if text.startswith("spotify:track:"):
-        return text
-    if "open.spotify.com/track/" in text:
-        track_id = text.split("track/")[1].split("?")[0].strip("/")
-        if track_id:
-            return f"spotify:track:{track_id}"
+    if not text:
+        raise ValueError("Media reference must not be empty.")
+
+    match = _SPOTIFY_URI_PATTERN.fullmatch(text)
+    if match:
+        media_type = match.group("type")
+        media_id = match.group("id")
+        return media_type, f"spotify:{media_type}:{media_id}"
+
+    if text.startswith("http://") or text.startswith("https://"):
+        url_match = _SPOTIFY_URL_PATTERN.search(text)
+        if url_match:
+            media_type = url_match.group("type")
+            media_id = url_match.group("id")
+            return media_type, f"spotify:{media_type}:{media_id}"
+
     if len(text) == 22 and text.isalnum():
-        return f"spotify:track:{text}"
+        # Treat bare IDs as tracks by default.
+        return "track", f"spotify:track:{text}"
+
     raise ValueError(
-        "Unsupported track reference. Provide a track URI, share link, or 22-character track ID."
+        "Unsupported media reference. Provide a track/album/playlist/artist URI, share link, or 22-character ID."
     )
 
 
@@ -130,9 +147,17 @@ def select_device(sp: spotipy.Spotify, preferred_name: Optional[str]) -> str:
     return devices[0]["id"]
 
 
-def start_playback(sp: spotipy.Spotify, device_id: str, track_uri: str) -> None:
+def start_playback(
+    sp: spotipy.Spotify,
+    device_id: str,
+    media_type: str,
+    media_uri: str,
+) -> None:
     sp.transfer_playback(device_id=device_id, force_play=False)
-    sp.start_playback(device_id=device_id, uris=[track_uri], position_ms=0)
+    if media_type == "track":
+        sp.start_playback(device_id=device_id, uris=[media_uri], position_ms=0)
+    else:
+        sp.start_playback(device_id=device_id, context_uri=media_uri)
 
 
 def build_spotify_client() -> spotipy.Spotify:
@@ -157,17 +182,17 @@ def print_devices(sp: spotipy.Spotify) -> None:
         name = device.get("name", "<unnamed>")
         device_type = device.get("type", "unknown")
         device_id = device.get("id", "<no-id>")
-        print(f"- {name:<20} [{device_type + "]":<12} id={device_id}{status}")
+        print(f"- {name:<20} [{device_type}] id={device_id}{status}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Schedule a Spotify track to start playing at a future time.",
+        description="Schedule a Spotify track, album, playlist, or artist to start playing at a future time.",
     )
     parser.add_argument(
-        "track",
+        "media",
         nargs="?",
-        help="Track URI, share link, or 22-character track ID",
+        help="Track, album, playlist, or artist URI/share link/ID",
     )
     parser.add_argument(
         "--at",
@@ -180,6 +205,11 @@ def main() -> None:
     parser.add_argument(
         "--date",
         help="Date (YYYY-MM-DD) to combine with --time. Must be today or in the future.",
+    )
+    parser.add_argument(
+        "--now",
+        action="store_true",
+        help="Start playback immediately instead of scheduling it.",
     )
     parser.add_argument(
         "--device",
@@ -200,20 +230,23 @@ def main() -> None:
         print_devices(spotify_client)
         return
 
-    if not args.track:
-        parser.error("Track argument is required unless --list-devices is used.")
+    if not args.media:
+        parser.error("Media argument is required unless --list-devices is used.")
+
+    if args.now and any([args.at, args.time, args.date]):
+        parser.error("--now cannot be combined with --at, --time, or --date.")
 
     try:
-        track_uri = parse_track_uri(args.track)
+        media_type, media_uri = parse_media_reference(args.media)
     except ValueError as exc:
         parser.error(str(exc))
 
-    try:
-        target = determine_target_datetime(at=args.at, time_only=args.time, date_only=args.date)
-    except ValueError as exc:
-        parser.error(str(exc))
-
-    print(f"Scheduling playback for {target.isoformat(sep=' ', timespec='seconds')}.")
+    target: Optional[datetime] = None
+    if not args.now:
+        try:
+            target = determine_target_datetime(at=args.at, time_only=args.time, date_only=args.date)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     try:
         spotify_client = build_spotify_client()
@@ -225,20 +258,26 @@ def main() -> None:
     except RuntimeError as exc:
         parser.error(str(exc))
 
-    now = datetime.now()
-    if target - now > timedelta(seconds=1):
-        remaining = target - now
-        minutes, seconds = divmod(int(remaining.total_seconds()), 60)
-        hours, minutes = divmod(minutes, 60)
+    if target is not None:
         print(
-            "Waiting for ~{:02d}:{:02d}:{:02d} (hh:mm:ss) before starting playback...".format(
-                hours, minutes, seconds
-            )
+            f"Scheduling {media_type} playback for {target.isoformat(sep=' ', timespec='seconds')}.",
         )
-        wait_until(target)
+        now = datetime.now()
+        if target - now > timedelta(seconds=1):
+            remaining = target - now
+            minutes, seconds = divmod(int(remaining.total_seconds()), 60)
+            hours, minutes = divmod(minutes, 60)
+            print(
+                "Waiting for ~{:02d}:{:02d}:{:02d} (hh:mm:ss) before starting playback...".format(
+                    hours, minutes, seconds
+                )
+            )
+            wait_until(target)
+    else:
+        print(f"Starting {media_type} playback now.")
 
     try:
-        start_playback(spotify_client, device_id, track_uri)
+        start_playback(spotify_client, device_id, media_type, media_uri)
     except spotipy.SpotifyException as exc:
         parser.error(f"Spotify refused to start playback: {exc}")
 

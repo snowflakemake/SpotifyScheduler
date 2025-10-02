@@ -34,6 +34,9 @@ except ImportError:
 if load_dotenv:
     load_dotenv()
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+os.chdir(SCRIPT_DIR)
+
 _SPOTIFY_URI_PATTERN = re.compile(
     r"spotify:(?P<type>track|album|playlist|artist):(?P<id>[A-Za-z0-9]{22})"
 )
@@ -191,7 +194,7 @@ def print_devices(sp: spotipy.Spotify) -> None:
         print(f"- {name:<20} [{device_type}] id={device_id}{status}")
 
 
-def build_system_command(args: argparse.Namespace) -> Tuple[list[str], Path]:
+def build_system_command(args: argparse.Namespace) -> list[str]:
     script_path = Path(__file__).resolve()
     python_executable = Path(sys.executable).resolve()
     command = [
@@ -202,22 +205,16 @@ def build_system_command(args: argparse.Namespace) -> Tuple[list[str], Path]:
     ]
     if args.device:
         command.extend(["--device", args.device])
-    if not args.no_browser:
-        command.append("--no-browser")
-    script_dir = script_path.parent
-    return command, script_dir
+    command.append("--no-browser")
+    return command
 
 
 def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
-    command, script_dir = build_system_command(args)
+    command = build_system_command(args)
     if os.name == "nt":
         if shutil.which("schtasks") is None:
             raise RuntimeError("'schtasks' command not found. Cannot create Windows scheduled task.")
-        base_cmd = command.copy()
-        cmdline = subprocess.list2cmdline(base_cmd)
-        cd_and_run = f'cd /d "{script_dir}" && {cmdline}'
-        task_parts = ["cmd.exe", "/c", cd_and_run]
-        task_command = subprocess.list2cmdline(task_parts)
+        task_command = subprocess.list2cmdline(command)
         task_name = f"SpotifyPlay_{target.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         create_cmd = [
             "schtasks",
@@ -243,11 +240,10 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
     if shutil.which("at") is None:
         raise RuntimeError("'at' command not found. Install it or use another scheduling method.")
     command_line = " ".join(shlex.quote(part) for part in command)
-    full_command = f"cd {shlex.quote(str(script_dir))} && {command_line}"
     at_time = target.strftime("%Y%m%d%H%M")
     result = subprocess.run(
         ["at", "-t", at_time],
-        input=f"{full_command}\n",
+        input=f"{command_line}\n",
         capture_output=True,
         text=True,
     )
@@ -344,7 +340,7 @@ def main() -> None:
         except RuntimeError as exc:
             parser.error(str(exc))
         print(
-            f"Created {job_label} for {target.isoformat(sep=' ', timespec='seconds')}."
+            f"Created {job_label} for {target.isoformat(sep=' ', timespec='seconds')}.",
         )
         print("The scheduled job will run this script with --now at the specified time.")
         return
@@ -391,3 +387,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Aborted by user.")
         sys.exit(130)
+
+
+
+
+

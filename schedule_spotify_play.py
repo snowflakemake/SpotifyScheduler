@@ -45,6 +45,19 @@ _SPOTIFY_URL_PATTERN = re.compile(
 )
 
 
+def find_venv_activation_script() -> Optional[Path]:
+    """Locate a virtualenv activation script to source before scheduled runs."""
+    candidates = []
+    env_venv = os.environ.get("VIRTUAL_ENV")
+    if env_venv:
+        candidates.append(Path(env_venv) / "bin" / "activate")
+    candidates.append(SCRIPT_DIR / "venv" / "bin" / "activate")
+    candidates.append(SCRIPT_DIR / ".venv" / "bin" / "activate")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
 def parse_media_reference(raw: str) -> Tuple[str, str]:
     """Normalise track/album/playlist/artist identifiers to a Spotify URI."""
     text = raw.strip()
@@ -241,9 +254,15 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
         raise RuntimeError("'at' command not found. Install it or use another scheduling method.")
     command_line = " ".join(shlex.quote(part) for part in command)
     at_time = target.strftime("%Y%m%d%H%M")
+    activate_script = find_venv_activation_script()
+    shell_parts = [f"cd {shlex.quote(str(SCRIPT_DIR))}"]
+    if activate_script:
+        shell_parts.append(f". {shlex.quote(str(activate_script))}")
+    shell_parts.append(command_line)
+    full_command = " && ".join(shell_parts)
     result = subprocess.run(
         ["at", "-t", at_time],
-        input=f"{command_line}\n",
+        input=f"{full_command}\n",
         capture_output=True,
         text=True,
     )

@@ -171,18 +171,17 @@ def print_devices(sp: spotipy.Spotify) -> None:
     if not devices:
         print("No available Spotify devices. Launch Spotify somewhere and try again.")
         return
-    print("Available Spotify devices:")
     for device in devices:
         status_bits = []
         if device.get("is_active"):
             status_bits.append("active")
         if device.get("is_private_session"):
             status_bits.append("private")
-        status = f" ({', '.join(status_bits)})" if status_bits else ""
+        status = f";({', '.join(status_bits)})" if status_bits else ""
         name = device.get("name", "<unnamed>")
         device_type = device.get("type", "unknown")
         device_id = device.get("id", "<no-id>")
-        print(f"- {name:<20} [{device_type}] id={device_id}{status}")
+        print(f"{name};{device_type};{device_id}{status}")
 
 
 def main() -> None:

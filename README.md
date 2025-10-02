@@ -7,6 +7,7 @@ This script schedules a Spotify track, album, playlist, or artist radio to start
 - Python 3.9 or newer.
 - The [`spotipy`](https://spotipy.readthedocs.io) package (install with `pip install -r requirements.txt`).
 - A Spotify Premium account and a registered application on the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+- For `--system-schedule`: the platform's scheduler tools must be available (Task Scheduler / `schtasks.exe` on Windows, `at` on Linux).
 
 Set the following environment variables before running the script:
 
@@ -40,8 +41,15 @@ Schedule playback:
 python schedule_spotify_play.py "https://open.spotify.com/album/2C6Z7gsiF3sPXso19p7MqU" --time 07:30 --device "Living Room"
 ```
 
+Create an OS-level job that will trigger playback later and let the script exit immediately:
+
+```powershell
+python schedule_spotify_play.py "spotify:album:2C6Z7gsiF3sPXso19p7MqU" --time 07:30 --system-schedule --device "Living Room"
+```
+
 - `media`: Accepts a Spotify URI (`spotify:track:...`, `spotify:album:...`, `spotify:playlist:...`, `spotify:artist:...`), share link, or raw 22-character ID (assumed to be a track when no type is given).
 - `--now`: Skip scheduling and start playback immediately.
+- `--system-schedule`: Use the OS scheduler (`schtasks` on Windows, `at` on Linux) to queue the playback and exit. Ensure the relevant tool is installed and accessible (e.g. Raspberry Pi OS users may need `sudo apt install at`).
 - `--time HH:MM[:SS]`: Sets the clock time. Without `--date` it schedules for the next occurrence of that time.
 - `--date YYYY-MM-DD`: Optional date to pair with `--time`. Must be today or in the future.
 - `--at YYYY-MM-DDTHH:MM[:SS]`: Alternative to `--time/--date` for an absolute timestamp.
@@ -54,5 +62,8 @@ The script confirms the scheduled playback time (unless `--now` is used), waits 
 ## Notes
 
 - Spotify requires an active Premium subscription for programmatic playback.
-- The machine running the script must stay awake until the scheduled time (unless `--now` is used).
-- If you need to schedule multiple items, run the script once per item in separate terminals or background jobs.
+- The machine running the script must stay awake until the scheduled time (unless `--now` or `--system-schedule` offloads to the OS scheduler).
+- If you need to schedule multiple items, run the script once per item in separate terminals or background jobs, or create multiple system jobs.
+- Ensure your environment variables or Spotipy cache are available to scheduled jobs (e.g., run the script from the same directory so the `.cache` file is reused).
+- Linux systems may need to enable the `atd` service (`sudo systemctl enable --now atd`) before jobs will execute.
+- Windows scheduled tasks inherit the security context of the user who creates them; make sure that user has rights to run the Python script and access the cache.

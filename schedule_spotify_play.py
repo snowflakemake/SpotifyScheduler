@@ -4,10 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import shlex
+import shutil
+import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timedelta, time as dt_time
+from pathlib import Path
 from typing import Optional, Tuple
 
 try:
@@ -171,17 +177,84 @@ def print_devices(sp: spotipy.Spotify) -> None:
     if not devices:
         print("No available Spotify devices. Launch Spotify somewhere and try again.")
         return
+    print("Available Spotify devices:")
     for device in devices:
         status_bits = []
         if device.get("is_active"):
             status_bits.append("active")
         if device.get("is_private_session"):
             status_bits.append("private")
-        status = f";({', '.join(status_bits)})" if status_bits else ""
+        status = f" ({', '.join(status_bits)})" if status_bits else ""
         name = device.get("name", "<unnamed>")
         device_type = device.get("type", "unknown")
         device_id = device.get("id", "<no-id>")
-        print(f"{name};{device_type};{device_id}{status}")
+        print(f"- {name:<20} [{device_type}] id={device_id}{status}")
+
+
+def build_system_command(args: argparse.Namespace) -> Tuple[list[str], Path]:
+    script_path = Path(__file__).resolve()
+    python_executable = Path(sys.executable).resolve()
+    command = [
+        str(python_executable),
+        str(script_path),
+        args.media,
+        "--now",
+    ]
+    if args.device:
+        command.extend(["--device", args.device])
+    if not args.no_browser:
+        command.append("--no-browser")
+    script_dir = script_path.parent
+    return command, script_dir
+
+
+def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
+    command, script_dir = build_system_command(args)
+    if os.name == "nt":
+        if shutil.which("schtasks") is None:
+            raise RuntimeError("'schtasks' command not found. Cannot create Windows scheduled task.")
+        base_cmd = command.copy()
+        cmdline = subprocess.list2cmdline(base_cmd)
+        cd_and_run = f'cd /d "{script_dir}" && {cmdline}'
+        task_parts = ["cmd.exe", "/c", cd_and_run]
+        task_command = subprocess.list2cmdline(task_parts)
+        task_name = f"SpotifyPlay_{target.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        create_cmd = [
+            "schtasks",
+            "/Create",
+            "/SC",
+            "ONCE",
+            "/TN",
+            task_name,
+            "/TR",
+            task_command,
+            "/ST",
+            target.strftime("%H:%M"),
+            "/SD",
+            target.strftime("%Y/%m/%d"),
+            "/F",
+        ]
+        result = subprocess.run(create_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip() or "Unable to create scheduled task."
+            raise RuntimeError(message)
+        return f"Windows Scheduled Task '{task_name}'"
+
+    if shutil.which("at") is None:
+        raise RuntimeError("'at' command not found. Install it or use another scheduling method.")
+    command_line = " ".join(shlex.quote(part) for part in command)
+    full_command = f"cd {shlex.quote(str(script_dir))} && {command_line}"
+    at_time = target.strftime("%Y%m%d%H%M")
+    result = subprocess.run(
+        ["at", "-t", at_time],
+        input=f"{full_command}\n",
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or "Unable to schedule job with 'at'."
+        raise RuntimeError(message)
+    return result.stdout.strip() or "at job scheduled"
 
 
 def main() -> None:
@@ -211,6 +284,11 @@ def main() -> None:
         help="Start playback immediately instead of scheduling it.",
     )
     parser.add_argument(
+        "--system-schedule",
+        action="store_true",
+        help="Create an OS-level scheduled job and exit.",
+    )
+    parser.add_argument(
         "--device",
         help="Name of the Spotify Connect device to target. Defaults to active device.",
     )
@@ -226,6 +304,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.list_devices and args.system_schedule:
+        parser.error("--system-schedule cannot be combined with --list-devices.")
+
     if args.list_devices:
         try:
             spotify_client = build_spotify_client(open_browser=not args.no_browser)
@@ -240,6 +321,9 @@ def main() -> None:
     if args.now and any([args.at, args.time, args.date]):
         parser.error("--now cannot be combined with --at, --time, or --date.")
 
+    if args.system_schedule and args.now:
+        parser.error("--system-schedule cannot be combined with --now.")
+
     try:
         media_type, media_uri = parse_media_reference(args.media)
     except ValueError as exc:
@@ -252,6 +336,19 @@ def main() -> None:
         except ValueError as exc:
             parser.error(str(exc))
 
+    if args.system_schedule:
+        if target is None:
+            parser.error("--system-schedule requires a future time via --at or --time/--date.")
+        try:
+            job_label = schedule_system_job(target, args)
+        except RuntimeError as exc:
+            parser.error(str(exc))
+        print(
+            f"Created {job_label} for {target.isoformat(sep=' ', timespec='seconds')}."
+        )
+        print("The scheduled job will run this script with --now at the specified time.")
+        return
+
     try:
         spotify_client = build_spotify_client(open_browser=not args.no_browser)
     except Exception as exc:  # pragma: no cover - auth issues passed to user
@@ -261,18 +358,6 @@ def main() -> None:
         device_id = select_device(spotify_client, args.device)
     except RuntimeError as exc:
         parser.error(str(exc))
-
-    match media_type:
-        case "track":
-            print(f"Track: \"{spotify_client.track(media_uri).get('name', '<unknown>')}\" by {', '.join(artist.get('name', '<unknown>') for artist in spotify_client.track(media_uri).get('artists', []))}")
-        case "album":
-            print(f"Album: \"{spotify_client.album(media_uri).get('name', '<unknown>')}\" by {', '.join(artist.get('name', '<unknown>') for artist in spotify_client.album(media_uri).get('artists', []))}")
-        case "playlist":
-            print(f"Playlist: \"{spotify_client.playlist(media_uri).get('name', '<unknown>')}\" by {spotify_client.playlist(media_uri).get('owner', {}).get('display_name', '<unknown>')}")
-        case "artist":
-            print(f"Artist: {spotify_client.artist(media_uri).get('name', '<unknown>')}")
-        case _:
-            raise ValueError(f"Unsupported media type: {media_type}")
 
     if target is not None:
         print(

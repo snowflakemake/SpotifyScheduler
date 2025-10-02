@@ -257,7 +257,7 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
     activate_script = find_venv_activation_script()
     shell_parts = [f"cd {shlex.quote(str(SCRIPT_DIR))}"]
     if activate_script:
-        shell_parts.append(f". {shlex.quote(str(activate_script))}")
+        shell_parts.append(f"source {shlex.quote(str(activate_script))}")
     shell_parts.append(command_line)
     full_command = " && ".join(shell_parts)
     result = subprocess.run(

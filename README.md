@@ -8,30 +8,17 @@ This script schedules a Spotify track, album, playlist, or artist radio to start
 - The [`spotipy`](https://spotipy.readthedocs.io) package (install with `pip install -r requirements.txt`).
 - A Spotify Premium account and a registered application on the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 
-Set the following environment variables before running the script in your terminal or in a `.env` file:
-
-```bash
-# In .env-file
-SPOTIPY_CLIENT_ID = "your-client-id"
-SPOTIPY_CLIENT_SECRET = "your-client-secret"
-SPOTIPY_REDIRECT_URI = "http://localhost:8080/callback"
-```
+Set the following environment variables before running the script:
 
 ```powershell
-# In PowerShell
 $env:SPOTIPY_CLIENT_ID = "your-client-id"
 $env:SPOTIPY_CLIENT_SECRET = "your-client-secret"
 $env:SPOTIPY_REDIRECT_URI = "http://localhost:8080/callback"
 ```
 
-```bash
-# In bash
-export SPOTIPY_CLIENT_ID="your-client-id"
-export SPOTIPY_CLIENT_SECRET="your-client-secret"
-export SPOTIPY_REDIRECT_URI="http://localhost:8080/callback"
-```
-
 Any redirect URI you configure here must also be added to your Spotify app settings. The first run launches a browser window so you can grant playback permissions; tokens are cached locally in `.cache`.
+
+If you are on a headless server, pass `--no-browser`. Spotipy will print an authorization URL that you can open on another device; after approving access, paste the redirect URL back into the terminal.
 
 ## Usage
 
@@ -60,6 +47,7 @@ python schedule_spotify_play.py "https://open.spotify.com/album/2C6Z7gsiF3sPXso1
 - `--at YYYY-MM-DDTHH:MM[:SS]`: Alternative to `--time/--date` for an absolute timestamp.
 - `--device`: Optional Spotify Connect device name. Defaults to your active device, or the first available one.
 - `--list-devices`: Authenticate, print the available Spotify Connect devices, and exit without scheduling playback.
+- `--no-browser`: Prevent the script from trying to launch a web browser during Spotify authorization (helpful on servers).
 
 The script confirms the scheduled playback time (unless `--now` is used), waits until the target moment, and then issues the playback command. Make sure the selected device is online shortly before the scheduled time; otherwise, playback will fail.
 

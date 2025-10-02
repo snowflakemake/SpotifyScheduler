@@ -160,9 +160,9 @@ def start_playback(
         sp.start_playback(device_id=device_id, context_uri=media_uri)
 
 
-def build_spotify_client() -> spotipy.Spotify:
+def build_spotify_client(*, open_browser: bool) -> spotipy.Spotify:
     scope = "user-modify-playback-state user-read-playback-state"
-    auth_manager = SpotifyOAuth(scope=scope, open_browser=True)
+    auth_manager = SpotifyOAuth(scope=scope, open_browser=open_browser)
     return spotipy.Spotify(auth_manager=auth_manager)
 
 
@@ -220,11 +220,16 @@ def main() -> None:
         action="store_true",
         help="List available Spotify Connect devices and exit.",
     )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not attempt to launch a browser for Spotify authorization.",
+    )
     args = parser.parse_args()
 
     if args.list_devices:
         try:
-            spotify_client = build_spotify_client()
+            spotify_client = build_spotify_client(open_browser=not args.no_browser)
         except Exception as exc:  # pragma: no cover - auth issues passed to user
             parser.error(f"Unable to authenticate with Spotify: {exc}")
         print_devices(spotify_client)
@@ -249,7 +254,7 @@ def main() -> None:
             parser.error(str(exc))
 
     try:
-        spotify_client = build_spotify_client()
+        spotify_client = build_spotify_client(open_browser=not args.no_browser)
     except Exception as exc:  # pragma: no cover - auth issues passed to user
         parser.error(f"Unable to authenticate with Spotify: {exc}")
 

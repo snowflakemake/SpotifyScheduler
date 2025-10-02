@@ -262,6 +262,18 @@ def main() -> None:
     except RuntimeError as exc:
         parser.error(str(exc))
 
+    match media_type:
+        case "track":
+            print(f"Track: \"{spotify_client.track(media_uri).get('name', '<unknown>')}\" by {', '.join(artist.get('name', '<unknown>') for artist in spotify_client.track(media_uri).get('artists', []))}")
+        case "album":
+            print(f"Album: \"{spotify_client.album(media_uri).get('name', '<unknown>')}\" by {', '.join(artist.get('name', '<unknown>') for artist in spotify_client.album(media_uri).get('artists', []))}")
+        case "playlist":
+            print(f"Playlist: \"{spotify_client.playlist(media_uri).get('name', '<unknown>')}\" by {spotify_client.playlist(media_uri).get('owner', {}).get('display_name', '<unknown>')}")
+        case "artist":
+            print(f"Artist: {spotify_client.artist(media_uri).get('name', '<unknown>')}")
+        case _:
+            raise ValueError(f"Unsupported media type: {media_type}")
+
     if target is not None:
         print(
             f"Scheduling {media_type} playback for {target.isoformat(sep=' ', timespec='seconds')}.",

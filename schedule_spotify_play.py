@@ -215,8 +215,7 @@ def build_system_command(args: argparse.Namespace, target: datetime) -> list[str
         str(python_executable),
         str(script_path),
         args.media,
-        f"--now",
-        ">> ~/schedule_spotify_play.log 2>&1",
+        "--now",
     ]
     if args.device:
         command.extend(["--device", args.device])
@@ -226,10 +225,15 @@ def build_system_command(args: argparse.Namespace, target: datetime) -> list[str
 
 def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
     command = build_system_command(args, target)
+    log_path = Path.home() / "schedule_spotify_play.log"
+    if os.name == "nt":
+        log_redirect = f'>> "{log_path}" 2>&1'
+    else:
+        log_redirect = f">> {shlex.quote(str(log_path))} 2>&1"
     if os.name == "nt":
         if shutil.which("schtasks") is None:
             raise RuntimeError("'schtasks' command not found. Cannot create Windows scheduled task.")
-        task_command = subprocess.list2cmdline(command)
+        task_command = subprocess.list2cmdline(command) + f" {log_redirect}"
         task_name = f"SpotifyPlay_{target.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         create_cmd = [
             "schtasks",
@@ -255,7 +259,7 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
     if shutil.which("at") is None:
         raise RuntimeError("'at' command not found. Install it or use another scheduling method.")
 
-    command_line = " ".join(shlex.quote(part) for part in command)
+    command_line = " ".join(shlex.quote(part) for part in command) + f" {log_redirect}"
     at_time = target.strftime("%Y%m%d%H%M")
     activate_script = find_venv_activation_script()
 

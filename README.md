@@ -59,6 +59,23 @@ python schedule_spotify_play.py "spotify:album:2C6Z7gsiF3sPXso19p7MqU" --time 07
 
 The script confirms the scheduled playback time (unless `--now` is used), waits until the target moment, and then issues the playback command. Make sure the selected device is online shortly before the scheduled time; otherwise, playback will fail.
 
+## Web Interface
+
+Prefer a browser-based workflow? A minimal Flask app is included that wraps the same scheduling logic:
+
+```bash
+pip install -r requirements.txt
+python web_app.py
+```
+
+Then visit [http://127.0.0.1:5000](http://127.0.0.1:5000) (or replace `127.0.0.1` with your host's LAN IP) to:
+
+- See the Spotify Connect devices available to your account
+- Pick a device, supply media (URI, share link, or ID), and choose either an ISO timestamp or a date/time pair
+- Schedule the OS-level job (`--system-schedule` is used under the hood) from the browser
+
+Set `FLASK_SECRET_KEY` if you need to override the default development secret. The web app reuses your existing Spotipy credentials and token cache; make sure those environment variables remain set when you launch it. The server binds to `0.0.0.0` so other devices on the network can reach it; set `PORT` or `FLASK_DEBUG=1` via environment variables if you need a different port or debug mode. Only expose the app on trusted networks, as there is no authentication layer built in.
+
 ## Notes
 
 - Spotify requires an active Premium subscription for programmatic playback.

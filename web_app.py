@@ -476,7 +476,7 @@ def index():
         jobs_error=jobs_error,
         date=datetime.now().date().isoformat(),
         time=next_minute.time().isoformat(),
-        volume=spotify_client.current_playback().get("device", {}).get("volume_percent") if spotify_client else None,
+        volume=spotify_client.current_playback().get("device", {}).get("volume_percent") if spotify_client and spotify_client.current_playback() else None,
     )
 
 

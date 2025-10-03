@@ -47,13 +47,15 @@
         <button type="submit">Schedule Playback</button>
       </form>
       <section>
-        <h2>Detected Devices</h2>
         {% if devices %}
-          <ul>
             {% for device in devices %}
-              <li>{{ device.name }} — {{ device.type }}{% if device.is_active %} (active){% endif %}</li>
+              {% if device.is_active %}¨
+                <h2>Active Device</h2>
+                <ul>
+                  <li>{{ device.name }} — {{ device.type }}</li>
+                </ul>
+              {% endif %}
             {% endfor %}
-          </ul>
         {% else %}
           <p class="device-warning">No devices reported. Launch Spotify to make one available.</p>
         {% endif %}

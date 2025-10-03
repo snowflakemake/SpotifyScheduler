@@ -183,6 +183,7 @@ input {
 
 .volume-slider {
   padding: 0;
+  background: url("Spotify_icon.svg");
 }
 
 .volume-number:before {

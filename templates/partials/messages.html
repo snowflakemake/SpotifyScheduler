@@ -1,0 +1,8 @@
+<div class="messages">
+  {% for category, message in get_flashed_messages(with_categories=True) %}
+    <div class="{{ category }}">{{ message }}</div>
+  {% endfor %}
+  {% if device_error %}
+    <div class="error">{{ device_error }}</div>
+  {% endif %}
+</div>

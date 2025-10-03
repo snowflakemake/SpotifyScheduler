@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Spotify Scheduler{% endblock %}
+
+{% block layout %}
+  <div class="layout">
+    {% include "partials/sidebar.html" %}
+    <main class="content">
+      <h1>Schedule Spotify Playback</h1>
+      {% include "partials/messages.html" %}
+      <form method="post">
+        <label>
+          Spotify media (URI, link, or 22-char ID)
+          <input name="media" type="text" required>
+        </label>
+        <label>
+          Device
+          <select name="device">
+            <option value="">Auto-select active/default</option>
+            {% for device in devices %}
+              <option value="{{ device.name }}">{{ device.name }} ({{ device.type }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <fieldset>
+          <legend>Schedule</legend>
+          <label>
+            ISO datetime (e.g. 2025-10-03T08:30)
+            <input name="iso_at" type="text" placeholder="Optional">
+          </label>
+          <div class="schedule-separator">— or —</div>
+          <label>
+            Date (YYYY-MM-DD)
+            <input name="date" type="date" placeholder="Optional" value="{{ date }}">
+          </label>
+          <label>
+            Time (HH:MM or HH:MM:SS)
+            <input name="time" type="time" step="1" placeholder="Optional" value="{{ time }}">
+          </label>
+        </fieldset>
+        <button type="submit">Schedule Playback</button>
+      </form>
+      <section>
+        <h2>Detected Devices</h2>
+        {% if devices %}
+          <ul>
+            {% for device in devices %}
+              <li>{{ device.name }} — {{ device.type }}{% if device.is_active %} (active){% endif %}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="device-warning">No devices reported. Launch Spotify to make one available.</p>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+{% endblock %}

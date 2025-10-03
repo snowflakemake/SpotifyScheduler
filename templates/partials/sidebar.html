@@ -1,0 +1,14 @@
+<aside class="sidebar">
+  <h1>Scheduled Jobs</h1>
+  {% if jobs_error %}
+    <p class="sidebar-error">{{ jobs_error }}</p>
+  {% elif jobs %}
+    <ul>
+      {% for job in jobs %}
+        {% include "partials/sidebar_job.html" %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="sidebar-empty">No pending jobs.</p>
+  {% endif %}
+</aside>

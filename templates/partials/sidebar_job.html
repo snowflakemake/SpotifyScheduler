@@ -1,0 +1,37 @@
+<li>
+  <div class="job-meta">
+    <strong>Job #{{ job.id }}</strong><br>
+    <span>{{ job.scheduled_for or job.details }}</span>
+  </div>
+  {% if job.media_parts %}
+    <div class="job-media">
+      <!-- {% if job.media_type_label %}
+        <span class="job-media__type">{{ job.media_type_label }}:&nbsp;</span>
+      {% endif %} -->
+      {% for part in job.media_parts %}
+        {% if not loop.first %}<span class="job-media__separator"><br></span>{% endif %}
+        <span class="job-media__{{ part.identifier }}">{{ part.text }}</span>
+      {% endfor %}
+    </div>
+  {% elif job.media_summary %}
+    <div class="job-media">{{ job.media_summary }}</div>
+  {% endif %}
+  <!-- {% if job.command %}
+    <div class="job-command">{{ job.command }}</div>
+  {% endif %} -->
+  <div class="job-footer">
+    {% if job.queue or job.user %}
+      <span>
+        {% if job.queue %}Queue {{ job.queue }}{% endif %}
+        {% if job.queue and job.user %} · {% endif %}
+        {% if job.user %}{{ job.user }}{% endif %}
+      </span>
+    {% else %}
+      <span>&nbsp;</span>
+    {% endif %}
+    <form method="post" action="{{ url_for('remove_job') }}">
+      <input type="hidden" name="job_id" value="{{ job.id }}">
+      <button type="submit">Remove</button>
+    </form>
+  </div>
+</li>

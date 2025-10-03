@@ -66,4 +66,5 @@ The script confirms the scheduled playback time (unless `--now` is used), waits 
 - If you need to schedule multiple items, run the script once per item in separate terminals or background jobs, or create multiple system jobs.
 - Ensure your environment variables or Spotipy cache are available to scheduled jobs (e.g., run the script from the same directory so the `.cache` file is reused).
 - Linux systems may need to enable the `atd` service (`sudo systemctl enable --now atd`) before jobs will execute.
+- When `--system-schedule` runs on Linux, the job sources `$VIRTUAL_ENV` or a local `venv`/`.venv` before invoking Python so dependencies are available.
 - Windows scheduled tasks inherit the security context of the user who creates them; make sure that user has rights to run the Python script and access the cache.

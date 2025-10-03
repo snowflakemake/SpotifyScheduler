@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import uuid
+import tempfile
 from datetime import datetime, timedelta, time as dt_time
 from pathlib import Path
 from typing import Optional, Tuple
@@ -252,24 +253,46 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
 
     if shutil.which("at") is None:
         raise RuntimeError("'at' command not found. Install it or use another scheduling method.")
+
     command_line = " ".join(shlex.quote(part) for part in command)
     at_time = target.strftime("%Y%m%d%H%M")
     activate_script = find_venv_activation_script()
-    shell_parts = [f"cd {shlex.quote(str(SCRIPT_DIR))}"]
+
+    script_lines = [
+        "#!/bin/sh",
+        "set -e",
+        f"cd {shlex.quote(str(SCRIPT_DIR))}",
+    ]
     if activate_script:
-        shell_parts.append(f"source {shlex.quote(str(activate_script))}")
-    shell_parts.append(command_line)
-    full_command = " && ".join(shell_parts)
-    result = subprocess.run(
-        ["at", "-t", at_time],
-        input=f"{full_command}\n",
-        capture_output=True,
-        text=True,
-    )
+        script_lines.append(f". {shlex.quote(str(activate_script))}")
+    script_lines.append(command_line)
+    script_content = "\n".join(script_lines) + "\n"
+
+    tmp_script: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", delete=False, encoding="utf-8", dir=str(SCRIPT_DIR), suffix="_at_job.sh"
+        ) as handle:
+            handle.write(script_content)
+            tmp_script = Path(handle.name)
+
+        result = subprocess.run(
+            ["at", "-t", at_time, "-f", str(tmp_script)],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        if tmp_script is not None:
+            try:
+                tmp_script.unlink()
+            except OSError:
+                pass
+
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "Unable to schedule job with 'at'."
         raise RuntimeError(message)
-    return result.stdout.strip() or "at job scheduled"
+
+    return result.stdout.strip() or result.stderr.strip() or "at job scheduled"
 
 
 def main() -> None:

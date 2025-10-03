@@ -208,14 +208,15 @@ def print_devices(sp: spotipy.Spotify) -> None:
         print(f"- {name:<20} [{device_type}] id={device_id}{status}")
 
 
-def build_system_command(args: argparse.Namespace) -> list[str]:
+def build_system_command(args: argparse.Namespace, target: datetime) -> list[str]:
     script_path = Path(__file__).resolve()
     python_executable = Path(sys.executable).resolve()
     command = [
         str(python_executable),
         str(script_path),
         args.media,
-        "--now",
+        f"--now",
+        ">> ~/schedule_spotify_play.log 2>&1",
     ]
     if args.device:
         command.extend(["--device", args.device])
@@ -224,7 +225,7 @@ def build_system_command(args: argparse.Namespace) -> list[str]:
 
 
 def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
-    command = build_system_command(args)
+    command = build_system_command(args, target)
     if os.name == "nt":
         if shutil.which("schtasks") is None:
             raise RuntimeError("'schtasks' command not found. Cannot create Windows scheduled task.")
@@ -262,6 +263,7 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
         "#!/bin/sh",
         "set -e",
         f"cd {shlex.quote(str(SCRIPT_DIR))}",
+        f"sleep {target.second}"
     ]
     if activate_script:
         script_lines.append(f". {shlex.quote(str(activate_script))}")
@@ -291,7 +293,7 @@ def schedule_system_job(target: datetime, args: argparse.Namespace) -> str:
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "Unable to schedule job with 'at'."
         raise RuntimeError(message)
-
+    print(f"Scheduled job script: {script_content}\n at path: {tmp_script}")
     return result.stdout.strip() or result.stderr.strip() or "at job scheduled"
 
 

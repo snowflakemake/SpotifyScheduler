@@ -22,13 +22,18 @@
             {% endfor %}
           </select>
         </label>
+        <label>
+          Volume (0-100)
+          <input name="volume" class="volume-slider" type="range" min="0" max="100" placeholder="Optional" value="{{volume}}" oninput="this.nextElementSibling.value = this.value">
+          <output class="volume-number">{{volume}}</output>
+        </label>
         <fieldset>
           <legend>Schedule</legend>
-          <label>
+          <!-- <label>
             ISO datetime (e.g. 2025-10-03T08:30)
             <input name="iso_at" type="text" placeholder="Optional">
           </label>
-          <div class="schedule-separator">— or —</div>
+          <div class="schedule-separator">— or —</div> -->
           <label>
             Date (YYYY-MM-DD)
             <input name="date" type="date" placeholder="Optional" value="{{ date }}">

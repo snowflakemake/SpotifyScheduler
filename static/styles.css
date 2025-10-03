@@ -180,3 +180,11 @@ input {
 .device-warning {
   color: #a04900;
 }
+
+.volume-slider {
+  padding: 0;
+}
+
+.volume-number:before {
+  content: "Setting volume: "
+}

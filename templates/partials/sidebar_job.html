@@ -10,6 +10,10 @@
         {{ job.details }}
       {% endif %}
     </span>
+    {% if job.volume is not none %}
+      <br>
+      <span class="job-volume">Volume: {{ job.volume }}%</span>
+    {% endif %}
   </div>
   {% if job.media_parts %}
     <div class="job-media">

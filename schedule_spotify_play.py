@@ -175,8 +175,12 @@ def start_playback(
     device_id: str,
     media_type: str,
     media_uri: str,
+    *,
+    volume: Optional[int] = None,
 ) -> None:
     sp.transfer_playback(device_id=device_id, force_play=False)
+    if volume is not None:
+        sp.volume(volume, device_id=device_id)
     if media_type == "track":
         sp.start_playback(device_id=device_id, uris=[media_uri], position_ms=0)
     else:
@@ -219,6 +223,8 @@ def build_system_command(args: argparse.Namespace, target: datetime) -> list[str
     ]
     if args.device:
         command.extend(["--device", args.device])
+    if getattr(args, "volume", None) is not None:
+        command.extend(["--volume", str(args.volume)])
     command.append("--no-browser")
     return command
 
@@ -337,6 +343,11 @@ def main() -> None:
         help="Name of the Spotify Connect device to target. Defaults to active device.",
     )
     parser.add_argument(
+        "--volume",
+        type=int,
+        help="Set playback volume (0-100) before starting media.",
+    )
+    parser.add_argument(
         "--list-devices",
         action="store_true",
         help="List available Spotify Connect devices and exit.",
@@ -367,6 +378,10 @@ def main() -> None:
 
     if args.system_schedule and args.now:
         parser.error("--system-schedule cannot be combined with --now.")
+
+    if args.volume is not None:
+        if not (0 <= args.volume <= 100):
+            parser.error("--volume must be between 0 and 100.")
 
     try:
         media_type, media_uri = parse_media_reference(args.media)
@@ -422,7 +437,13 @@ def main() -> None:
         print(f"Starting {media_type} playback now.")
 
     try:
-        start_playback(spotify_client, device_id, media_type, media_uri)
+        start_playback(
+            spotify_client,
+            device_id,
+            media_type,
+            media_uri,
+            volume=args.volume,
+        )
     except spotipy.SpotifyException as exc:
         parser.error(f"Spotify refused to start playback: {exc}")
 

@@ -112,6 +112,26 @@ def _extract_media_from_command(command: Optional[str]) -> Optional[tuple[str, s
     return media_type, media_uri
 
 
+def _extract_volume_from_command(command: Optional[str]) -> Optional[int]:
+    if not command:
+        return None
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    for idx, token in enumerate(tokens):
+        if token == "--volume" and idx + 1 < len(tokens):
+            candidate = tokens[idx + 1]
+            try:
+                value = int(candidate)
+            except ValueError:
+                return None
+            if 0 <= value <= 100:
+                return value
+            return None
+    return None
+
+
 def _format_duration_ms(value: Any) -> Optional[str]:
     try:
         duration_ms = int(value)
@@ -329,6 +349,8 @@ def list_system_jobs(*, spotify_client: Optional[Any] = None) -> tuple[list[dict
                     offset_seconds = 0
             playback_dt = scheduled_dt + timedelta(seconds=offset_seconds)
             playback_label = playback_dt.strftime("%a %b %d %H:%M:%S %Y")
+        volume = _extract_volume_from_command(command)
+        volume_label = f"{volume}%" if volume is not None else None
         job_payload = {
             "id": job_id,
             "scheduled_for": scheduled_for,
@@ -340,6 +362,8 @@ def list_system_jobs(*, spotify_client: Optional[Any] = None) -> tuple[list[dict
             "user": user,
             "details": details,
             "command": command,
+            "volume": volume,
+            "volume_label": volume_label,
         }
         media_details = _build_job_media_details(command, spotify_client)
         if media_details:
@@ -382,11 +406,13 @@ def index():
     if request.method == "POST":
         media_input = (request.form.get("media") or "").strip()
         device_name = (request.form.get("device") or "").strip() or None
+        volume_raw = (request.form.get("volume") or "").strip()
         iso_at = (request.form.get("iso_at") or "").strip() or None
         date_input = (request.form.get("date") or "").strip() or None
         time_input = (request.form.get("time") or "").strip() or None
 
         errors = []
+        volume_value: Optional[int] = None
         if not media_input:
             errors.append("Media is required.")
         else:
@@ -394,6 +420,17 @@ def index():
                 parse_media_reference(media_input)
             except ValueError as exc:
                 errors.append(str(exc))
+
+        if volume_raw:
+            try:
+                candidate = int(volume_raw)
+            except ValueError:
+                errors.append("Volume must be an integer between 0 and 100.")
+            else:
+                if 0 <= candidate <= 100:
+                    volume_value = candidate
+                else:
+                    errors.append("Volume must be between 0 and 100.")
 
         target: Optional[datetime] = None
         if not errors:
@@ -413,7 +450,7 @@ def index():
             for item in errors:
                 flash(item, "error")
         elif target is not None:
-            args = SimpleNamespace(media=media_input, device=device_name)
+            args = SimpleNamespace(media=media_input, device=device_name, volume=volume_value)
             try:
                 job_label = schedule_system_job(target, args)
             except Exception as exc:
@@ -436,6 +473,7 @@ def index():
         jobs_error=jobs_error,
         date=datetime.now().date().isoformat(),
         time=datetime.now().time().replace(microsecond=0).isoformat(),
+        volume=spotify_client.current_playback().get("device", {}).get("volume_percent") if spotify_client else None,
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import shlex
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -29,7 +29,7 @@ def fetch_devices(client: Optional[Any] = None) -> list[dict]:
     return devices
 
 
-def inspect_at_job_command(job_id: str) -> Optional[str]:
+def _inspect_at_job_details(job_id: str) -> Optional[dict[str, Any]]:
     try:
         result = subprocess.run(
             ["at", "-c", job_id], capture_output=True, text=True, check=False
@@ -38,7 +38,22 @@ def inspect_at_job_command(job_id: str) -> Optional[str]:
         return None
     if result.returncode != 0:
         return None
-    for line in reversed(result.stdout.splitlines()):
+    lines = result.stdout.splitlines()
+    sleep_seconds: Optional[int] = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("sleep "):
+            parts = stripped.split()
+            if len(parts) >= 2:
+                try:
+                    sleep_seconds = int(parts[1])
+                except ValueError:
+                    sleep_seconds = None
+            continue
+    command: Optional[str] = None
+    for line in reversed(lines):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -54,8 +69,18 @@ def inspect_at_job_command(job_id: str) -> Optional[str]:
             key = stripped.split("=", 1)[0]
             if key.isidentifier():
                 continue
-        return stripped
-    return None
+        command = stripped
+        break
+    if command is None and sleep_seconds is None:
+        return None
+    return {"command": command, "sleep_seconds": sleep_seconds}
+
+
+def inspect_at_job_command(job_id: str) -> Optional[str]:
+    details = _inspect_at_job_details(job_id)
+    if not details:
+        return None
+    return details.get("command")
 
 
 def _extract_media_from_command(command: Optional[str]) -> Optional[tuple[str, str]]:
@@ -87,6 +112,21 @@ def _extract_media_from_command(command: Optional[str]) -> Optional[tuple[str, s
     return media_type, media_uri
 
 
+def _format_duration_ms(value: Any) -> Optional[str]:
+    try:
+        duration_ms = int(value)
+    except (TypeError, ValueError):
+        return None
+    if duration_ms < 0:
+        return None
+    total_seconds = duration_ms // 1000
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
 def _describe_spotify_media(
     spotify_client: Optional[Any], media_type: str, media_uri: str
 ) -> Optional[dict[str, Any]]:
@@ -116,10 +156,13 @@ def _describe_spotify_media(
                 parts.append({"identifier": "album", "text": album})
             pieces = [item["text"] for item in parts]
             summary = "Track: " + " — ".join(pieces) if pieces else None
+            duration_label = _format_duration_ms(data.get("duration_ms"))
             return {
                 "summary": summary,
                 "type_label": "Track",
                 "parts": parts,
+                "duration_ms": data.get("duration_ms"),
+                "duration_label": duration_label,
             }
 
         if media_type == "playlist":
@@ -195,12 +238,21 @@ def _build_job_media_details(
     media_type_label = media_type.title()
     media_parts: list[dict[str, str]] = []
     summary: Optional[str]
+    duration_ms: Optional[int] = None
+    duration_label: Optional[str] = None
     if description is None:
         summary = f"{media_type_label}: {media_uri}"
         media_parts.append({"identifier": "uri", "text": media_uri})
     else:
         summary = description.get("summary") or f"{media_type_label}: {media_uri}"
         media_type_label = description.get("type_label") or media_type_label
+        duration_value = description.get("duration_ms")
+        if duration_value is not None:
+            try:
+                duration_ms = int(duration_value)
+            except (TypeError, ValueError):
+                duration_ms = None
+        duration_label = description.get("duration_label")
         for part in description.get("parts", []):
             text = part.get("text")
             identifier = part.get("identifier")
@@ -220,6 +272,8 @@ def _build_job_media_details(
         "media_summary": summary,
         "media_type_label": media_type_label,
         "media_parts": media_parts,
+        "media_duration_ms": duration_ms,
+        "media_duration_label": duration_label,
     }
 
 
@@ -248,18 +302,40 @@ def list_system_jobs(*, spotify_client: Optional[Any] = None) -> tuple[list[dict
         details = rest.strip()
         tokens = details.split()
         scheduled_for = None
+        scheduled_dt: Optional[datetime] = None
         queue = None
         user = None
         if len(tokens) >= 5:
             scheduled_for = " ".join(tokens[:5])
+            try:
+                scheduled_dt = datetime.strptime(scheduled_for, "%a %b %d %H:%M:%S %Y")
+            except ValueError:
+                scheduled_dt = None
         if len(tokens) >= 6:
             queue = tokens[5]
         if len(tokens) >= 7:
             user = tokens[6]
-        command = inspect_at_job_command(job_id)
+        job_details = _inspect_at_job_details(job_id)
+        command = job_details.get("command") if job_details else None
+        sleep_seconds = job_details.get("sleep_seconds") if job_details else None
+        playback_dt: Optional[datetime] = None
+        playback_label: Optional[str] = None
+        if scheduled_dt is not None:
+            offset_seconds = 0
+            if sleep_seconds is not None:
+                try:
+                    offset_seconds = int(sleep_seconds)
+                except (TypeError, ValueError):
+                    offset_seconds = 0
+            playback_dt = scheduled_dt + timedelta(seconds=offset_seconds)
+            playback_label = playback_dt.strftime("%a %b %d %H:%M:%S %Y")
         job_payload = {
             "id": job_id,
             "scheduled_for": scheduled_for,
+            "scheduled_datetime": scheduled_dt,
+            "playback_datetime": playback_dt,
+            "playback_label": playback_label,
+            "sleep_seconds": sleep_seconds,
             "queue": queue,
             "user": user,
             "details": details,

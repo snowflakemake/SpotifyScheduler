@@ -1,7 +1,15 @@
 <li>
   <div class="job-meta">
     <strong>Job #{{ job.id }}</strong><br>
-    <span>{{ job.scheduled_for or job.details }}</span>
+    <span>
+      {% if job.playback_label %}
+        {{ job.playback_label }}
+      {% elif job.scheduled_for %}
+        {{ job.scheduled_for }}
+      {% else %}
+        {{ job.details }}
+      {% endif %}
+    </span>
   </div>
   {% if job.media_parts %}
     <div class="job-media">

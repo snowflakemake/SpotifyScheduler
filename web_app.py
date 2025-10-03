@@ -465,6 +465,9 @@ def index():
     devices_ns = [SimpleNamespace(**item) for item in devices]
     jobs_ns = [SimpleNamespace(**item) for item in jobs]
 
+    # Get next minute rounded time for default
+    next_minute = (datetime.now() + timedelta(minutes=1)).replace(second=0, microsecond=0)
+
     return render_template(
         "index.html",
         devices=devices_ns,
@@ -472,7 +475,7 @@ def index():
         jobs=jobs_ns,
         jobs_error=jobs_error,
         date=datetime.now().date().isoformat(),
-        time=datetime.now().time().replace(microsecond=0).isoformat(),
+        time=next_minute.time().isoformat(),
         volume=spotify_client.current_playback().get("device", {}).get("volume_percent") if spotify_client else None,
     )
 

@@ -14,7 +14,7 @@ Set the following environment variables before running the script:
 ```powershell
 $env:SPOTIPY_CLIENT_ID = "your-client-id"
 $env:SPOTIPY_CLIENT_SECRET = "your-client-secret"
-$env:SPOTIPY_REDIRECT_URI = "http://localhost:8080/callback"
+$env:SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8080/callback"
 ```
 
 Any redirect URI you configure here must also be added to your Spotify app settings. The first run launches a browser window so you can grant playback permissions; tokens are cached locally in `.cache`.
